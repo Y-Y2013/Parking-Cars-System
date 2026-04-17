@@ -51,7 +51,7 @@ class _ParkingMapState extends State<ParkingMap> {
     final width = MediaQuery.of(context).size.width;
 
     // تحديد مكان البوابة حسب الشاشة
-    gateX = width * 0.8;
+    gateX = width * 1.2;
 
     final turnRight = isTop;
 

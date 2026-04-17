@@ -1,23 +1,32 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
-  static const String _usersKey = 'users_data_v2';
+  static const String _usersKey = 'users_data_v4';
   static const String _slotsKey = 'parking_slots_v2';
 
   static const String adminUsername = 'admin';
   static const String adminPassword = 'admin123';
 
-  static Future<Map<String, String>> _getUsers() async {
+  static Future<Map<String, Map<String, String>>> _getUsers() async {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getStringList(_usersKey);
 
-    final users = <String, String>{};
+    final users = <String, Map<String, String>>{};
 
     if (data != null) {
       for (final item in data) {
         final parts = item.split('|');
-        if (parts.length == 2) {
-          users[parts[0]] = parts[1];
+
+        if (parts.length == 3) {
+          users[parts[0]] = {
+            'password': parts[1],
+            'phone': parts[2],
+          };
+        } else if (parts.length == 2) {
+          users[parts[0]] = {
+            'password': parts[1],
+            'phone': '',
+          };
         }
       }
     }
@@ -25,41 +34,76 @@ class StorageService {
     return users;
   }
 
-  static Future<void> _saveUsers(Map<String, String> users) async {
+  static Future<void> _saveUsers(
+      Map<String, Map<String, String>> users,
+      ) async {
     final prefs = await SharedPreferences.getInstance();
-    final data = users.entries.map((e) => '${e.key}|${e.value}').toList();
+
+    final data = users.entries.map((e) {
+      final password = e.value['password'] ?? '';
+      final phone = e.value['phone'] ?? '';
+      return '${e.key}|$password|$phone';
+    }).toList();
+
     await prefs.setStringList(_usersKey, data);
   }
 
-  static Future<bool> registerUser(String username, String password) async {
+  static Future<bool> registerUser(
+      String username,
+      String password,
+      String phone,
+      ) async {
     username = username.trim();
     password = password.trim();
+    phone = phone.trim();
 
-    if (username.isEmpty || password.isEmpty) return false;
+    if (username.isEmpty || password.isEmpty || phone.isEmpty) return false;
     if (username.toLowerCase() == adminUsername) return false;
 
     final users = await _getUsers();
     if (users.containsKey(username)) return false;
 
-    users[username] = password;
+    users[username] = {
+      'password': password,
+      'phone': phone,
+    };
+
     await _saveUsers(users);
     return true;
   }
 
-  static Future<bool> loginUser(String username, String password) async {
+  static Future<bool> loginUser(
+      String username,
+      String password,
+      String phone,
+      ) async {
     username = username.trim();
     password = password.trim();
+    phone = phone.trim();
 
     if (username == adminUsername && password == adminPassword) {
       return true;
     }
 
     final users = await _getUsers();
-    return users[username] == password;
+    final user = users[username];
+
+    if (user == null) return false;
+
+    final savedPassword = user['password'] ?? '';
+    final savedPhone = user['phone'] ?? '';
+
+    return savedPassword == password && savedPhone == phone;
   }
 
   static Future<bool> loginAdmin(String username, String password) async {
-    return username.trim() == adminUsername && password.trim() == adminPassword;
+    return username.trim() == adminUsername &&
+        password.trim() == adminPassword;
+  }
+
+  static Future<String?> getUserPhone(String username) async {
+    final users = await _getUsers();
+    return users[username]?['phone'];
   }
 
   static Future<List<bool>> loadSlots(

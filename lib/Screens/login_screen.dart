@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:parking_cars/Models/country_phone_option.dart';
 import 'package:parking_cars/Services/storage_service.dart';
 import 'package:parking_cars/Screens/home_screen.dart';
 import 'package:parking_cars/Screens/register_screen.dart';
@@ -14,14 +16,35 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController();
 
+  CountryPhoneOption _selectedCountry = kDefaultCountryPhoneOption;
   bool _loading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _phoneController.dispose();
     super.dispose();
+  }
+
+  String? _phoneValidator(String? value) {
+    final digits = value?.trim() ?? '';
+
+    if (digits.isEmpty) return 'اكتب رقم الهاتف';
+    if (!RegExp(r'^\d+$').hasMatch(digits)) return 'الأرقام فقط';
+
+    if (digits.length < _selectedCountry.minDigits ||
+        digits.length > _selectedCountry.maxDigits) {
+      if (_selectedCountry.minDigits == _selectedCountry.maxDigits) {
+        return 'رقم ${_selectedCountry.name} يجب أن يكون ${_selectedCountry.minDigits} أرقام';
+      }
+      return 'رقم ${_selectedCountry.name} يجب أن يكون بين ${_selectedCountry.minDigits} و ${_selectedCountry.maxDigits} أرقام';
+    }
+
+    return null;
   }
 
   Future<void> _login() async {
@@ -30,9 +53,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _loading = true);
 
+    final fullPhone =
+        '${_selectedCountry.dialCode}${_phoneController.text.trim()}';
+
     final success = await StorageService.loginUser(
       _usernameController.text,
       _passwordController.text,
+      fullPhone,
     );
 
     if (!mounted) return;
@@ -40,7 +67,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اسم المستخدم أو كلمة المرور غير صحيحة')),
+        const SnackBar(
+          content: Text('اسم المستخدم أو كلمة المرور أو الهاتف غير صحيح'),
+        ),
       );
       return;
     }
@@ -53,13 +82,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const bg1 = Color(0xFF07111F);
+    const bg2 = Color(0xFF0D1A30);
+    const card = Color(0xFF101B33);
+    const border = Color(0xFF24304A);
     const accent = Color(0xFF7C8CF8);
 
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF07111F), Color(0xFF0D1A30), Color(0xFF07111F)],
+            colors: [bg1, bg2, bg1],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -73,9 +106,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF101B33),
+                    color: card,
                     borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: const Color(0xFF24304A)),
+                    border: Border.all(color: border),
                     boxShadow: const [
                       BoxShadow(
                         blurRadius: 30,
@@ -97,7 +130,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             decoration: BoxDecoration(
                               color: const Color(0xFF0D1628),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: accent.withOpacity(.35)),
+                              border: Border.all(
+                                color: accent.withOpacity(.35),
+                              ),
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(20),
@@ -138,19 +173,89 @@ class _LoginScreenState extends State<LoginScreen> {
                             prefixIcon: Icon(Icons.person_outline),
                           ),
                           validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'اكتب اسم المستخدم' : null,
+                          (v == null || v.trim().isEmpty)
+                              ? 'اكتب اسم المستخدم'
+                              : null,
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 150,
+                              child: DropdownButtonFormField<CountryPhoneOption>(
+                                value: _selectedCountry,
+                                isExpanded: true,
+                                dropdownColor: card,
+                                style: const TextStyle(color: Colors.white),
+                                decoration: const InputDecoration(
+                                  labelText: 'Code',
+                                  prefixIcon: Icon(Icons.public),
+                                ),
+                                items: kCountryPhoneOptions
+                                    .map(
+                                      (country) =>
+                                      DropdownMenuItem<CountryPhoneOption>(
+                                        value: country,
+                                        child: Text(country.title),
+                                      ),
+                                )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _selectedCountry = value;
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _phoneController,
+                                keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                style: const TextStyle(color: Colors.white),
+                                decoration: InputDecoration(
+                                  labelText: 'Phone',
+                                  prefixIcon: const Icon(Icons.phone),
+                                  hintText: _selectedCountry.minDigits ==
+                                      _selectedCountry.maxDigits
+                                      ? 'Enter ${_selectedCountry.minDigits} digits'
+                                      : 'Enter ${_selectedCountry.minDigits}-${_selectedCountry.maxDigits} digits',
+                                ),
+                                validator: _phoneValidator,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 14),
                         TextFormField(
                           controller: _passwordController,
-                          obscureText: true,
+                          obscureText: _obscurePassword,
                           style: const TextStyle(color: Colors.white),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Password',
-                            prefixIcon: Icon(Icons.lock_outline),
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                            ),
                           ),
                           validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'اكتب كلمة المرور' : null,
+                          (v == null || v.trim().isEmpty)
+                              ? 'اكتب كلمة المرور'
+                              : null,
                         ),
                         const SizedBox(height: 22),
                         ElevatedButton(
@@ -166,7 +271,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           )
                               : const Text(
                             'Sign in',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -174,7 +282,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const RegisterScreen(),
+                              ),
                             );
                           },
                           child: const Text('Create new account'),
